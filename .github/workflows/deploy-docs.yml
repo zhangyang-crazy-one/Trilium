@@ -66,8 +66,8 @@ jobs:
           echo "✓ User Guide and Developer Guide built successfully"
 
       - name: Deploy
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' && (vars.REPO_MAIN == '' || github.repository == vars.REPO_MAIN) }}
         uses: ./.github/actions/deploy-to-cloudflare-pages
-        if: github.repository == ${{ vars.REPO_MAIN }}
         with:
           project_name: "trilium-docs"
           comment_body: "📚 Documentation preview is ready"
