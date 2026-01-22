@@ -143,15 +143,8 @@ jobs:
               echo "${DOCKERHUB_REGISTRY}/${DOCKERHUB_IMAGE}"
               echo "EOF"
             } >> "$GITHUB_ENV"
-            {
-              echo "DOCKER_OUTPUTS<<EOF"
-              echo "type=image,name=${GHCR_REGISTRY}/${IMAGE_NAME},push-by-digest=true,name-canonical=true,push=true"
-              echo "type=image,name=${DOCKERHUB_REGISTRY}/${DOCKERHUB_IMAGE},push-by-digest=true,name-canonical=true,push=true"
-              echo "EOF"
-            } >> "$GITHUB_ENV"
           else
             echo "DOCKER_IMAGES=${GHCR_REGISTRY}/${IMAGE_NAME}" >> "$GITHUB_ENV"
-            echo "DOCKER_OUTPUTS=type=image,name=${GHCR_REGISTRY}/${IMAGE_NAME},push-by-digest=true,name-canonical=true,push=true" >> "$GITHUB_ENV"
           fi
 
       - name: Checkout repository
@@ -209,27 +202,54 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push by digest
-        id: build
+      - name: Build and push by digest (GHCR)
+        id: build_ghcr
         uses: docker/build-push-action@v6
         with:
           context: apps/server
           file: apps/server/${{ matrix.dockerfile }}
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: ${{ env.DOCKER_OUTPUTS }}
+          outputs: type=image,name=${{ env.GHCR_REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
 
-      - name: Export digest
+      - name: Build and push by digest (DockerHub)
+        if: ${{ env.DOCKERHUB_ENABLED == 'true' }}
+        id: build_dockerhub
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/server
+          file: apps/server/${{ matrix.dockerfile }}
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.DOCKERHUB_REGISTRY }}/${{ env.DOCKERHUB_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digest (GHCR)
         run: |
-          mkdir -p /tmp/digests
-          digest="${{ steps.build.outputs.digest }}"
-          touch "/tmp/digests/${digest#sha256:}"
+          mkdir -p /tmp/digests/ghcr
+          digest="${{ steps.build_ghcr.outputs.digest }}"
+          touch "/tmp/digests/ghcr/${digest#sha256:}"
 
-      - name: Upload digest
+      - name: Export digest (DockerHub)
+        if: ${{ env.DOCKERHUB_ENABLED == 'true' }}
+        run: |
+          mkdir -p /tmp/digests/dockerhub
+          digest="${{ steps.build_dockerhub.outputs.digest }}"
+          touch "/tmp/digests/dockerhub/${digest#sha256:}"
+
+      - name: Upload digest (GHCR)
         uses: actions/upload-artifact@v6
         with:
-          name: digests-${{ env.PLATFORM_PAIR }}-${{ matrix.dockerfile }}
-          path: /tmp/digests/*
+          name: digests-ghcr-${{ env.PLATFORM_PAIR }}-${{ matrix.dockerfile }}
+          path: /tmp/digests/ghcr/*
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload digest (DockerHub)
+        if: ${{ env.DOCKERHUB_ENABLED == 'true' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: digests-dockerhub-${{ env.PLATFORM_PAIR }}-${{ matrix.dockerfile }}
+          path: /tmp/digests/dockerhub/*
           if-no-files-found: error
           retention-days: 1
 
@@ -241,11 +261,18 @@ jobs:
     env:
       DOCKERHUB_ENABLED: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
     steps:
-      - name: Download digests
+      - name: Download digests (GHCR)
         uses: actions/download-artifact@v7
         with:
-          path: /tmp/digests
-          pattern: digests-*
+          path: /tmp/digests/ghcr
+          pattern: digests-ghcr-*
+          merge-multiple: true
+      - name: Download digests (DockerHub)
+        if: ${{ env.DOCKERHUB_ENABLED == 'true' }}
+        uses: actions/download-artifact@v7
+        with:
+          path: /tmp/digests/dockerhub
+          pattern: digests-dockerhub-*
           merge-multiple: true
       - name: Set IMAGE_NAME to lowercase
         run: echo "IMAGE_NAME=${IMAGE_NAME,,}" >> $GITHUB_ENV
@@ -302,7 +329,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Create GHCR manifest list and push
-        working-directory: /tmp/digests
+        working-directory: /tmp/digests/ghcr
         run: |
           # Extract the branch or tag name from the ref
           REF_NAME=$(echo "${GITHUB_REF}" | sed 's/refs\/heads\///' | sed 's/refs\/tags\///')
@@ -331,7 +358,7 @@ jobs:
           fi
       - name: Create DockerHub manifest list and push
         if: ${{ env.DOCKERHUB_ENABLED == 'true' }}
-        working-directory: /tmp/digests
+        working-directory: /tmp/digests/dockerhub
         run: |
           # Extract the branch or tag name from the ref
           REF_NAME=$(echo "${GITHUB_REF}" | sed 's/refs\/heads\///' | sed 's/refs\/tags\///')
