@@ -143,10 +143,15 @@ jobs:
               echo "${DOCKERHUB_REGISTRY}/${DOCKERHUB_IMAGE}"
               echo "EOF"
             } >> "$GITHUB_ENV"
-            echo "DOCKER_IMAGE_NAMES=${GHCR_REGISTRY}/${IMAGE_NAME},${DOCKERHUB_REGISTRY}/${DOCKERHUB_IMAGE}" >> "$GITHUB_ENV"
+            {
+              echo "DOCKER_OUTPUTS<<EOF"
+              echo "type=image,name=${GHCR_REGISTRY}/${IMAGE_NAME},push-by-digest=true,name-canonical=true,push=true"
+              echo "type=image,name=${DOCKERHUB_REGISTRY}/${DOCKERHUB_IMAGE},push-by-digest=true,name-canonical=true,push=true"
+              echo "EOF"
+            } >> "$GITHUB_ENV"
           else
             echo "DOCKER_IMAGES=${GHCR_REGISTRY}/${IMAGE_NAME}" >> "$GITHUB_ENV"
-            echo "DOCKER_IMAGE_NAMES=${GHCR_REGISTRY}/${IMAGE_NAME}" >> "$GITHUB_ENV"
+            echo "DOCKER_OUTPUTS=type=image,name=${GHCR_REGISTRY}/${IMAGE_NAME},push-by-digest=true,name-canonical=true,push=true" >> "$GITHUB_ENV"
           fi
 
       - name: Checkout repository
@@ -212,7 +217,7 @@ jobs:
           file: apps/server/${{ matrix.dockerfile }}
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,name=${{ env.DOCKER_IMAGE_NAMES }},push-by-digest=true,name-canonical=true,push=true
+          outputs: ${{ env.DOCKER_OUTPUTS }}
 
       - name: Export digest
         run: |
