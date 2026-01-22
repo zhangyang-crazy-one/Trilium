@@ -27,7 +27,7 @@ describe("Login Route test", () => {
             .get("/login")
             .expect(200);
 
-        expect(res.text).toMatch(/assets\/v[0-9.a-z]+\/src\/login\.js/);
+        expect(res.text).toMatch(/assets\/v[0-9A-Za-z.-]+\/src\/login\.js/);
 
     });
 

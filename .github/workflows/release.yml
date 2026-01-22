@@ -142,14 +142,27 @@ jobs:
           pattern: release-*
           path: upload
 
-      - name: Publish stable release
+      - name: Publish stable release (with discussion)
+        if: ${{ vars.RELEASE_DISCUSSION_CATEGORY != '' }}
         uses: softprops/action-gh-release@v2.5.0
         with:
           draft: false
           body_path: docs/Release Notes/Release Notes/${{ github.ref_name }}.md
           fail_on_unmatched_files: true
           files: upload/*.*
-          discussion_category_name: Releases
+          discussion_category_name: ${{ vars.RELEASE_DISCUSSION_CATEGORY }}
+          make_latest: ${{ !contains(github.ref, 'rc') }}
+          prerelease: ${{ contains(github.ref, 'rc') }}
+          token: ${{ secrets.RELEASE_PAT || github.token }}
+
+      - name: Publish stable release
+        if: ${{ vars.RELEASE_DISCUSSION_CATEGORY == '' }}
+        uses: softprops/action-gh-release@v2.5.0
+        with:
+          draft: false
+          body_path: docs/Release Notes/Release Notes/${{ github.ref_name }}.md
+          fail_on_unmatched_files: true
+          files: upload/*.*
           make_latest: ${{ !contains(github.ref, 'rc') }}
           prerelease: ${{ contains(github.ref, 'rc') }}
           token: ${{ secrets.RELEASE_PAT || github.token }}

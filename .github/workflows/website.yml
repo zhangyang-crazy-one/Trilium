@@ -40,6 +40,7 @@ jobs:
         run: pnpm website:build
 
       - name: Deploy
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' && (vars.REPO_MAIN == '' || github.repository == vars.REPO_MAIN) }}
         uses: ./.github/actions/deploy-to-cloudflare-pages
         with:
           project_name: "trilium-homepage"
