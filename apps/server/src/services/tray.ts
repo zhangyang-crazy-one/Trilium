@@ -1,6 +1,6 @@
 import electron from "electron";
 import type { BrowserWindow, Tray } from "electron";
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { default as i18next, t } from "i18next";
 import path from "path";
 
@@ -20,15 +20,41 @@ let tray: Tray;
 // is minimized
 const windowVisibilityMap: Record<number, boolean> = {};; // Dictionary for storing window ID and its visibility status
 
-function resolveTrayAssetPath(fileName: string) {
+function getTrayAssetCandidates(fileName: string) {
     if (process.env.NODE_ENV === "development") {
-        return path.join(__dirname, "../../../desktop/src/assets/images/tray", fileName);
+        return [path.join(__dirname, "../../../desktop/src/assets/images/tray", fileName)];
     }
 
-    return path.resolve(path.join(getResourceDir(), "assets", "images", "tray", fileName));
+    const candidates = [
+        path.resolve(path.join(getResourceDir(), "assets", "images", "tray", fileName))
+    ];
+
+    if (process.resourcesPath) {
+        candidates.push(
+            path.join(process.resourcesPath, "app.asar", "assets", "images", "tray", fileName),
+            path.join(process.resourcesPath, "assets", "images", "tray", fileName)
+        );
+    }
+
+    return candidates;
 }
 
-function loadTrayImage(iconPath: string): Electron.NativeImage {
+function findTrayAssetPath(fileName: string) {
+    for (const candidate of getTrayAssetCandidates(fileName)) {
+        if (existsSync(candidate)) {
+            return candidate;
+        }
+    }
+
+    return undefined;
+}
+
+function loadTrayImage(fileName: string) {
+    const iconPath = findTrayAssetPath(fileName);
+    if (!iconPath) {
+        return undefined;
+    }
+
     try {
         const buffer = readFileSync(iconPath);
         const image = electron.nativeImage.createFromBuffer(buffer);
@@ -37,10 +63,10 @@ function loadTrayImage(iconPath: string): Electron.NativeImage {
             return image;
         }
     } catch {
-        // Fall back to an empty image if the asset is missing/unreadable.
+        // Ignore missing or unreadable assets to avoid crashing the app.
     }
 
-    return electron.nativeImage.createEmpty();
+    return undefined;
 }
 
 function getTrayIcon() {
@@ -53,12 +79,12 @@ function getTrayIcon() {
         name = "icon-color";
     }
 
-    return loadTrayImage(resolveTrayAssetPath(`${name}.png`));
+    return loadTrayImage(`${name}.png`);
 }
 
-function getIconPath(name: string): Electron.NativeImage {
+function getIconPath(name: string) {
     const suffix = !isMac && electron.nativeTheme.shouldUseDarkColors ? "-inverted" : "";
-    return loadTrayImage(resolveTrayAssetPath(`${name}Template${suffix}.png`));
+    return loadTrayImage(`${name}Template${suffix}.png`);
 }
 
 function registerVisibilityListener(window: BrowserWindow) {
@@ -240,44 +266,50 @@ function updateTrayMenu() {
     }
 
 
+    const newWindowIcon = getIconPath("new-window");
+    const newNoteIcon = getIconPath("new-note");
+    const todayIcon = getIconPath("today");
+    const bookmarksIcon = getIconPath("bookmarks");
+    const recentsIcon = getIconPath("recents");
+    const closeIcon = getIconPath("close");
     const contextMenu = electron.Menu.buildFromTemplate([
         ...windowVisibilityMenuItems,
         { type: "separator" },
         {
             label: t("tray.open_new_window"),
             type: "normal",
-            icon: getIconPath("new-window"),
+            ...(newWindowIcon ? { icon: newWindowIcon } : {}),
             click: () => openNewWindow()
         },
         {
             label: t("tray.new-note"),
             type: "normal",
-            icon: getIconPath("new-note"),
+            ...(newNoteIcon ? { icon: newNoteIcon } : {}),
             click: () => triggerKeyboardAction("createNoteIntoInbox")
         },
         {
             label: t("tray.today"),
             type: "normal",
-            icon: getIconPath("today"),
+            ...(todayIcon ? { icon: todayIcon } : {}),
             click: cls.wrap(async () => openInSameTab(await date_notes.getTodayNote()))
         },
         {
             label: t("tray.bookmarks"),
             type: "submenu",
-            icon: getIconPath("bookmarks"),
+            ...(bookmarksIcon ? { icon: bookmarksIcon } : {}),
             submenu: buildBookmarksMenu()
         },
         {
             label: t("tray.recents"),
             type: "submenu",
-            icon: getIconPath("recents"),
+            ...(recentsIcon ? { icon: recentsIcon } : {}),
             submenu: buildRecentNotesMenu()
         },
         { type: "separator" },
         {
             label: t("tray.close"),
             type: "normal",
-            icon: getIconPath("close"),
+            ...(closeIcon ? { icon: closeIcon } : {}),
             click: () => {
                 const windows = electron.BrowserWindow.getAllWindows();
                 windows.forEach(window => {
@@ -311,7 +343,12 @@ function createTray() {
         return;
     }
 
-    tray = new electron.Tray(getTrayIcon());
+    const trayIcon = getTrayIcon();
+    if (!trayIcon) {
+        return;
+    }
+
+    tray = new electron.Tray(trayIcon);
     tray.setToolTip(t("tray.tooltip"));
     // Restore focus
     tray.on("click", changeVisibility);
