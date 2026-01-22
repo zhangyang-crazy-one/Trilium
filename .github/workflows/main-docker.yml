@@ -126,8 +126,12 @@ jobs:
       - name: Configure Docker registries
         run: |
           if [ "$DOCKERHUB_ENABLED" = "true" ]; then
+            DOCKERHUB_USER="${{ secrets.DOCKERHUB_USERNAME }}"
+            REPO_NAME="${IMAGE_NAME##*/}"
             if [ -n "$DOCKERHUB_IMAGE_NAME" ]; then
               DOCKERHUB_IMAGE="$DOCKERHUB_IMAGE_NAME"
+            elif [ -n "$DOCKERHUB_USER" ]; then
+              DOCKERHUB_IMAGE="$DOCKERHUB_USER/$REPO_NAME"
             else
               DOCKERHUB_IMAGE="$IMAGE_NAME"
             fi
@@ -245,8 +249,12 @@ jobs:
       - name: Configure Docker registries
         run: |
           if [ "$DOCKERHUB_ENABLED" = "true" ]; then
+            DOCKERHUB_USER="${{ secrets.DOCKERHUB_USERNAME }}"
+            REPO_NAME="${IMAGE_NAME##*/}"
             if [ -n "$DOCKERHUB_IMAGE_NAME" ]; then
               DOCKERHUB_IMAGE="$DOCKERHUB_IMAGE_NAME"
+            elif [ -n "$DOCKERHUB_USER" ]; then
+              DOCKERHUB_IMAGE="$DOCKERHUB_USER/$REPO_NAME"
             else
               DOCKERHUB_IMAGE="$IMAGE_NAME"
             fi
