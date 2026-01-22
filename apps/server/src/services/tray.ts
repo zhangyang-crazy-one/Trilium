@@ -1,5 +1,6 @@
 import electron from "electron";
 import type { BrowserWindow, Tray } from "electron";
+import { readFileSync } from "fs";
 import { default as i18next, t } from "i18next";
 import path from "path";
 
@@ -19,7 +20,30 @@ let tray: Tray;
 // is minimized
 const windowVisibilityMap: Record<number, boolean> = {};; // Dictionary for storing window ID and its visibility status
 
-function getTrayIconPath() {
+function resolveTrayAssetPath(fileName: string) {
+    if (process.env.NODE_ENV === "development") {
+        return path.join(__dirname, "../../../desktop/src/assets/images/tray", fileName);
+    }
+
+    return path.resolve(path.join(getResourceDir(), "assets", "images", "tray", fileName));
+}
+
+function loadTrayImage(iconPath: string): Electron.NativeImage {
+    try {
+        const buffer = readFileSync(iconPath);
+        const image = electron.nativeImage.createFromBuffer(buffer);
+
+        if (!image.isEmpty()) {
+            return image;
+        }
+    } catch {
+        // Fall back to an empty image if the asset is missing/unreadable.
+    }
+
+    return electron.nativeImage.createEmpty();
+}
+
+function getTrayIcon() {
     let name: string;
     if (isMac) {
         name = "icon-blackTemplate";
@@ -29,21 +53,12 @@ function getTrayIconPath() {
         name = "icon-color";
     }
 
-    if (process.env.NODE_ENV === "development") {
-        return path.join(__dirname, "../../../desktop/src/assets/images/tray", `${name}.png`);
-    } else {
-        return path.resolve(path.join(getResourceDir(), "assets", "images", "tray", `${name}.png`));
-    }
+    return loadTrayImage(resolveTrayAssetPath(`${name}.png`));
 }
 
-function getIconPath(name: string) {
+function getIconPath(name: string): Electron.NativeImage {
     const suffix = !isMac && electron.nativeTheme.shouldUseDarkColors ? "-inverted" : "";
-
-    if (process.env.NODE_ENV === "development") {
-        return path.join(__dirname, "../../../desktop/src/assets/images/tray", `${name}Template${suffix}.png`);
-    } else {
-        return path.resolve(path.join(getResourceDir(), "assets", "images", "tray", `${name}Template${suffix}.png`));
-    }
+    return loadTrayImage(resolveTrayAssetPath(`${name}Template${suffix}.png`));
 }
 
 function registerVisibilityListener(window: BrowserWindow) {
@@ -296,7 +311,7 @@ function createTray() {
         return;
     }
 
-    tray = new electron.Tray(getTrayIconPath());
+    tray = new electron.Tray(getTrayIcon());
     tray.setToolTip(t("tray.tooltip"));
     // Restore focus
     tray.on("click", changeVisibility);
