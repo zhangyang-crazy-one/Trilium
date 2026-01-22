@@ -52,3 +52,9 @@ upload
 site/
 apps/*/coverage
 scripts/translation/.language*.json
+
+# AI Development Tools
+.claude/
+.opencode/
+planning/
+rules/

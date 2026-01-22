@@ -7,6 +7,7 @@ async function main() {
 
     // Copy assets
     build.copy("src/assets", "assets/");
+    build.copy("/apps/desktop/src/assets/images/tray", "assets/images/tray/");
     build.triggerBuildAndCopyTo("packages/share-theme", "share-theme/assets/");
     build.copy("/packages/share-theme/src/templates", "share-theme/templates/");
 
