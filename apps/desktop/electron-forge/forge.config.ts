@@ -30,6 +30,7 @@ const macosSignConfiguration = process.env.APPLE_ID ? {
         teamId: process.env.APPLE_TEAM_ID!
     }
 } : undefined;
+const enableDmgMaker = process.platform !== "darwin" || process.env.TARGET_ARCH !== "arm64";
 
 const config: ForgeConfig = {
     outDir: "out",
@@ -142,12 +143,14 @@ const config: ForgeConfig = {
                 windowsSign: windowsSignConfiguration
             }
         },
-        {
-            name: "@electron-forge/maker-dmg",
-            config: {
-                icon: path.join(APP_ICON_PATH, "icon.icns")
-            }
-        },
+        ...(enableDmgMaker
+            ? [{
+                name: "@electron-forge/maker-dmg",
+                config: {
+                    icon: path.join(APP_ICON_PATH, "icon.icns")
+                }
+            }]
+            : []),
         {
             name: "@electron-forge/maker-zip",
             config: {
