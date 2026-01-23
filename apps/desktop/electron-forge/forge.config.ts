@@ -6,6 +6,8 @@ import type { ForgeConfig } from "@electron-forge/shared-types";
 import { existsSync } from "fs";
 
 const ELECTRON_FORGE_DIR = __dirname;
+const DESKTOP_PACKAGE_JSON_PATH = path.join(ELECTRON_FORGE_DIR, "..", "package.json");
+const desktopPackageJson: { version?: string } = fs.readJsonSync(DESKTOP_PACKAGE_JSON_PATH);
 
 const EXECUTABLE_NAME = "trilium"; // keep in sync with server's package.json -> packagerConfig.executableName
 const APP_ICON_PATH = path.join(ELECTRON_FORGE_DIR, "app-icon");
@@ -31,6 +33,7 @@ const macosSignConfiguration = process.env.APPLE_ID ? {
     }
 } : undefined;
 const enableDmgMaker = process.platform !== "darwin" || process.env.TARGET_ARCH !== "arm64";
+const squirrelCompatibleVersion = toSquirrelCompatibleVersion(desktopPackageJson.version);
 
 const config: ForgeConfig = {
     outDir: "out",
@@ -140,7 +143,8 @@ const config: ForgeConfig = {
                 iconUrl: "https://raw.githubusercontent.com/TriliumNext/Trilium/refs/heads/main/apps/desktop/electron-forge/app-icon/icon.ico",
                 setupIcon: path.join(ELECTRON_FORGE_DIR, "setup-icon/setup.ico"),
                 loadingGif: path.join(ELECTRON_FORGE_DIR, "setup-icon/setup-banner.gif"),
-                windowsSign: windowsSignConfiguration
+                windowsSign: windowsSignConfiguration,
+                version: squirrelCompatibleVersion
             }
         },
         ...(enableDmgMaker
@@ -300,6 +304,20 @@ function getExtraResourcesForPlatform() {
     }
 
     return resources;
+}
+
+function toSquirrelCompatibleVersion(version: string | undefined): string | undefined {
+    if (!version) {
+        return undefined;
+    }
+
+    const segments = version.split(".");
+    const isNumeric = (value: string) => /^[0-9]+$/.test(value);
+    if (segments.length === 4 && segments.every(isNumeric)) {
+        return `${segments[0]}.${segments[1]}.${segments[2]}-${segments[3]}`;
+    }
+
+    return version;
 }
 
 function getELFArch(file: string) {
