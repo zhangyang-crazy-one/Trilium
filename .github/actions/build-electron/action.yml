@@ -20,7 +20,7 @@ runs:
   steps:
   # Certificate setup
   - name: Import Apple certificates
-    if: inputs.os == 'macos'
+    if: inputs.os == 'macos' && env.APPLE_APP_CERTIFICATE_BASE64 != '' && env.APPLE_APP_CERTIFICATE_PASSWORD != ''
     uses: apple-actions/import-codesign-certs@v6
     with:
       p12-file-base64: ${{ env.APPLE_APP_CERTIFICATE_BASE64 }}
@@ -29,7 +29,7 @@ runs:
       keychain-password: ${{ github.run_id }}
 
   - name: Install Installer certificate
-    if: inputs.os == 'macos'
+    if: inputs.os == 'macos' && env.APPLE_INSTALLER_CERTIFICATE_BASE64 != '' && env.APPLE_INSTALLER_CERTIFICATE_PASSWORD != ''
     uses: apple-actions/import-codesign-certs@v6
     with:
       p12-file-base64: ${{ env.APPLE_INSTALLER_CERTIFICATE_BASE64 }}
@@ -38,7 +38,7 @@ runs:
       keychain-password: ${{ github.run_id }}
 
   - name: Verify certificates
-    if: inputs.os == 'macos'
+    if: inputs.os == 'macos' && env.APPLE_APP_CERTIFICATE_BASE64 != '' && env.APPLE_INSTALLER_CERTIFICATE_BASE64 != ''
     shell: ${{ inputs.shell }}
     run: |
       echo "Available signing identities in app keychain:"
@@ -91,7 +91,7 @@ runs:
 
   # Add DMG signing step
   - name: Sign DMG
-    if: inputs.os == 'macos'
+    if: inputs.os == 'macos' && env.APPLE_APP_CERTIFICATE_BASE64 != '' && env.APPLE_ID != '' && env.APPLE_ID_PASSWORD != '' && env.APPLE_TEAM_ID != ''
     shell: ${{ inputs.shell }}
     run: |
       echo "Signing DMG file..."
@@ -116,7 +116,7 @@ runs:
       fi
 
   - name: Verify code signing
-    if: inputs.os == 'macos'
+    if: inputs.os == 'macos' && env.APPLE_APP_CERTIFICATE_BASE64 != ''
     shell: ${{ inputs.shell }}
     run: |
       echo "Verifying code signing for all artifacts..."
