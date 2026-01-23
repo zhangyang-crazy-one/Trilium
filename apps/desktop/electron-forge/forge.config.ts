@@ -311,10 +311,19 @@ function toSquirrelCompatibleVersion(version: string | undefined): string | unde
         return undefined;
     }
 
-    const segments = version.split(".");
     const isNumeric = (value: string) => /^[0-9]+$/.test(value);
+    const segments = version.split(".");
     if (segments.length === 4 && segments.every(isNumeric)) {
-        return `${segments[0]}.${segments[1]}.${segments[2]}-${segments[3]}`;
+        return `${segments[0]}.${segments[1]}.${segments[2]}-preview${segments[3]}`;
+    }
+
+    const dashIndex = version.indexOf("-");
+    if (dashIndex !== -1) {
+        const base = version.slice(0, dashIndex);
+        const prerelease = version.slice(dashIndex + 1);
+        if (isNumeric(prerelease)) {
+            return `${base}-preview${prerelease}`;
+        }
     }
 
     return version;
