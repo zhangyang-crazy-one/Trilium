@@ -11,7 +11,8 @@ const filesToCheck = [
 ]
 
 function main() {
-    const expectedVersion = process.argv[2];
+    const rawVersion = process.argv[2];
+    const expectedVersion = rawVersion?.startsWith('v') ? rawVersion.slice(1) : rawVersion;
     if (!expectedVersion) {
         console.error('Expected version argument is missing.');
         process.exit(1);
