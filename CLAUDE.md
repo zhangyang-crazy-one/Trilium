@@ -1,152 +1,190 @@
-# CLAUDE.md
+# 全局 Claude Code 配置
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+> 本项目使用模块化规则系统。详细规则位于 `.claude/rules/` 目录。
 
-## Overview
+---
 
-Trilium Notes is a hierarchical note-taking application with advanced features like synchronization, scripting, and rich text editing. It's built as a TypeScript monorepo using pnpm, with multiple applications and shared packages.
+## 规则系统概览
 
-## Development Commands
+<rules_system>
+规则按触发时机从 `.claude/rules/` 目录模块化加载。
 
-### Setup
-- `pnpm install` - Install all dependencies
-- `corepack enable` - Enable pnpm if not available
+### 规则文件
 
-### Running Applications
-- `pnpm run server:start` - Start development server (http://localhost:8080)
-- `pnpm run server:start-prod` - Run server in production mode
+| 文件 | 触发时机 | 用途 |
+|------|----------|------|
+| `00-global.md` | SessionStart | 全局行为规范 |
+| `01-code-quality.md` | PreToolUse (Write/Edit) | 代码验证 |
+| `02-code-style.md` | PreToolUse (Write/Edit) | 代码风格 |
+| `03-security.md` | PreToolUse (Write/Edit) | 安全检查 |
+| `04-performance.md` | PreToolUse (Write/Edit) | 性能优化 |
+| `05-documentation.md` | Stop | 文档同步 |
+| `06-context7-query.md` | UserPromptSubmit | 外部查询 |
+| `07-refactoring.md` | PreToolUse (Read) | 重构检测 |
 
-### Building
-- `pnpm run client:build` - Build client application
-- `pnpm run server:build` - Build server application
-- `pnpm run electron:build` - Build desktop application
+### 加载机制
 
-### Testing
-- `pnpm test:all` - Run all tests (parallel + sequential)
-- `pnpm test:parallel` - Run tests that can run in parallel
-- `pnpm test:sequential` - Run tests that must run sequentially (server, ckeditor5-mermaid, ckeditor5-math)
-- `pnpm coverage` - Generate coverage reports
+- **SessionStart**: 加载 `00-global.md`，初始化会话行为
+- **UserPromptSubmit**: 评估技能匹配，检查外部库查询需求
+- **PreToolUse**: 根据工具类型注入相关规则提醒
+- **Stop**: 检查文档同步和任务完成状态
+</rules_system>
 
-## Architecture Overview
+---
 
-### Monorepo Structure
-- **apps/**: Runnable applications
-  - `client/` - Frontend application (shared by server and desktop)
-  - `server/` - Node.js server with web interface
-  - `desktop/` - Electron desktop application
-  - `web-clipper/` - Browser extension for saving web content
-  - Additional tools: `db-compare`, `dump-db`, `edit-docs`
+## 核心原则（快速参考）
 
-- **packages/**: Shared libraries
-  - `commons/` - Shared interfaces and utilities
-  - `ckeditor5/` - Custom rich text editor with Trilium-specific plugins
-  - `codemirror/` - Code editor customizations
-  - `highlightjs/` - Syntax highlighting
-  - Custom CKEditor plugins: `ckeditor5-admonition`, `ckeditor5-footnotes`, `ckeditor5-math`, `ckeditor5-mermaid`
+### 上下文窗口管理
 
-### Core Architecture Patterns
+<context_window_management>
+上下文窗口接近限制时会自动压缩。不要因 token 预算提前停止任务。
+在上下文刷新前保存进度到记忆中。绝不人为提前停止任何任务。
+</context_window_management>
 
-#### Three-Layer Cache System
-- **Becca** (Backend Cache): Server-side entity cache (`apps/server/src/becca/`)
-- **Froca** (Frontend Cache): Client-side mirror of backend data (`apps/client/src/services/froca.ts`)
-- **Shaca** (Share Cache): Optimized cache for shared/published notes (`apps/server/src/share/`)
+### 行动优先
 
-#### Entity System
-Core entities are defined in `apps/server/src/becca/entities/`:
-- `BNote` - Notes with content and metadata
-- `BBranch` - Hierarchical relationships between notes (allows multiple parents)
-- `BAttribute` - Key-value metadata attached to notes
-- `BRevision` - Note version history
-- `BOption` - Application configuration
+<default_to_action>
+默认直接实施更改，而非仅提建议。推断用户意图并采取行动。
+使用工具发现缺失细节，而非猜测。Python 程序使用 `uv` 运行。
+</default_to_action>
 
-#### Widget-Based UI
-Frontend uses a widget system (`apps/client/src/widgets/`):
-- `BasicWidget` - Base class for all UI components
-- `NoteContextAwareWidget` - Widgets that respond to note changes
-- `RightPanelWidget` - Widgets displayed in the right panel
-- Type-specific widgets in `type_widgets/` directory
+### 并行工具调用
 
-#### API Architecture
-- **Internal API**: REST endpoints in `apps/server/src/routes/api/`
-- **ETAPI**: External API for third-party integrations (`apps/server/src/etapi/`)
-- **WebSocket**: Real-time synchronization (`apps/server/src/services/ws.ts`)
+<use_parallel_tool_calls>
+无依赖的多个工具调用应并行执行。有依赖时按顺序执行。
+永远不要使用占位符或猜测缺失参数。
+</use_parallel_tool_calls>
 
-### Key Files for Understanding Architecture
+### 调查后再回答
 
-1. **Application Entry Points**:
-   - `apps/server/src/main.ts` - Server startup
-   - `apps/client/src/desktop.ts` - Client initialization
+<investigate_before_answering>
+永远不要对未打开的代码进行推测。必须先读取用户引用的文件再回答。
+提供有根据的、无幻觉的答案。
+</investigate_before_answering>
 
-2. **Core Services**:
-   - `apps/server/src/becca/becca.ts` - Backend data management
-   - `apps/client/src/services/froca.ts` - Frontend data synchronization
-   - `apps/server/src/services/backend_script_api.ts` - Scripting API
+---
 
-3. **Database Schema**:
-   - `apps/server/src/assets/db/schema.sql` - Core database structure
+## 强制要求速查表
 
-4. **Configuration**:
-   - `package.json` - Project dependencies and scripts
+### 代码质量 (MUST)
 
-## Note Types and Features
+| 规则 | 说明 |
+|------|------|
+| 类型安全 | 禁止 `as any`、`@ts-ignore`、`@ts-expect-error` |
+| 验证 | 编辑后必须运行 `lsp_diagnostics` |
+| 导出类型 | 所有导出必须有显式类型注解 |
 
-Trilium supports multiple note types, each with specialized widgets:
-- **Text**: Rich text with CKEditor5 (markdown import/export)
-- **Code**: Syntax-highlighted code editing with CodeMirror
-- **File**: Binary file attachments
-- **Image**: Image display with editing capabilities
-- **Canvas**: Drawing/diagramming with Excalidraw
-- **Mermaid**: Diagram generation
-- **Relation Map**: Visual note relationship mapping
-- **Web View**: Embedded web pages
-- **Doc/Book**: Hierarchical documentation structure
+### 代码风格 (MUST)
 
-## Development Guidelines
+| 规则 | 限制 |
+|------|------|
+| 组件文件 | ≤ 300 行 |
+| 服务文件 | ≤ 500 行 |
+| 嵌套深度 | ≤ 4 层 |
+| 导入 | 禁止 `import *` |
 
-### Testing Strategy
-- Server tests run sequentially due to shared database
-- Client tests can run in parallel
-- E2E tests use Playwright for both server and desktop apps
-- Build validation tests check artifact integrity
+### 安全 (MUST)
 
-### Scripting System
-Trilium provides powerful user scripting capabilities:
-- Frontend scripts run in browser context
-- Backend scripts run in Node.js context with full API access
-- Script API documentation available in `docs/Script API/`
+| 规则 | 说明 |
+|------|------|
+| 环境变量 | 禁止硬编码密钥，使用 `.env` |
+| 模板 | 必须维护 `.env.template` |
+| Gitignore | 必须包含 `.env` 等敏感文件 |
 
-### Internationalization
-- Translation files in `apps/client/src/translations/`
-- Supported languages: English, German, Spanish, French, Romanian, Chinese
+### 性能 (MUST)
 
-### Security Considerations
-- Per-note encryption with granular protected sessions
-- CSRF protection for API endpoints
-- OpenID and TOTP authentication support
-- Sanitization of user-generated content
+| 规则 | 说明 |
+|------|------|
+| 数据库 | 禁止 N+1 查询 |
+| 列表 | 100+ 项使用虚拟化 |
+| 清理 | useEffect 必须清理副作用 |
 
-## Common Development Tasks
+### 外部查询 (MUST)
 
-### Adding New Note Types
-1. Create widget in `apps/client/src/widgets/type_widgets/`
-2. Register in `apps/client/src/services/note_types.ts`
-3. Add backend handling in `apps/server/src/services/notes.ts`
+| 规则 | 说明 |
+|------|------|
+| 不熟悉的库 | 必须先查询文档 |
+| 优先级 | Context7 → deepwiki → GitHub |
+| 冲突 | 官方文档优先 |
 
-### Extending Search
-- Search expressions handled in `apps/server/src/services/search/`
-- Add new search operators in search context files
+### 文档同步 (MUST)
 
-### Custom CKEditor Plugins
-- Create new package in `packages/` following existing plugin structure
-- Register in `packages/ckeditor5/src/plugins.ts`
+| 触发条件 | 需更新的文档 |
+|----------|--------------|
+| API 变更 | `docs/API.md` |
+| 架构变更 | `docs/ARCHITECTURE.md` |
+| 配置变更 | `README.md`、`.env.template` |
 
-### Database Migrations
-- Add migration scripts in `apps/server/src/migrations/`
-- Update schema in `apps/server/src/assets/db/schema.sql`
+---
 
-## Build System Notes
-- Uses pnpm for monorepo management
-- Vite for fast development builds
-- ESBuild for production optimization
-- pnpm workspaces for dependency management
-- Docker support with multi-stage builds
+## Windows 脚本编码规范
+
+<windows_script_encoding>
+在 Windows 平台编写包含中文的 PowerShell 脚本时，必须遵循以下规范以确保中文正确显示：
+
+### 文件编码 (MUST)
+
+| 规则 | 说明 |
+|------|------|
+| UTF-8 with BOM | 所有包含中文的 `.ps1` 文件**必须**使用 UTF-8 with BOM 编码保存 |
+| BOM 标识 | 文件开头必须包含 BOM 字节序标记 (`EF BB BF`) |
+
+### 输出编码设置 (MUST)
+
+在脚本开头（注释之后）添加以下代码：
+
+```powershell
+# 设置输出编码为 UTF-8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+```
+
+### 完整示例
+
+```powershell
+﻿# script-name.ps1 - 脚本描述
+# 触发时机: Hook 类型
+# 功能: 功能说明
+
+param(
+    [string]$ParamName = ""
+)
+
+# 设置输出编码为 UTF-8（必须在 param 之后）
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
+# 脚本主体代码...
+Write-Output "中文输出测试"
+```
+
+### 注意事项
+
+| 规则 | 说明 |
+|------|------|
+| param 位置 | `param()` 块**必须**紧跟在注释之后，不能有其他可执行代码在前 |
+| 编码设置位置 | 编码设置代码**必须**放在 `param()` 块之后 |
+| 无 param 脚本 | 如果脚本没有参数，编码设置可以直接放在注释之后 |
+
+### 检查清单
+
+- [ ] 文件使用 UTF-8 with BOM 编码保存
+- [ ] 脚本开头设置了 `[Console]::OutputEncoding`
+- [ ] 脚本开头设置了 `$OutputEncoding`
+- [ ] 中文字符在控制台正确显示
+</windows_script_encoding>
+
+---
+
+## 临时文件清理
+
+<cleanup>
+任务结束时必须清理临时文件、辅助脚本、日志和缓存。
+清理后验证工作区与原始状态一致（排除有意更改）。
+</cleanup>
+
+---
+
+## 详细规则
+
+完整规则请参阅 `.claude/rules/` 目录下的对应文件。
