@@ -165,7 +165,7 @@ runs:
       fi
 
   - name: Sign the RPM
-    if: inputs.os == 'linux'
+    if: inputs.os == 'linux' && env.GPG_SIGNING_KEY != ''
     shell: ${{ inputs.shell }}
     run: |
       echo -n "$GPG_SIGNING_KEY" | base64 --decode | gpg --import
