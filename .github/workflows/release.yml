@@ -43,7 +43,7 @@ jobs:
             shell: bash
             forge_platform: linux
           - name: windows
-            image: win-signing
+            image: ${{ vars.WINDOWS_SIGN_EXECUTABLE != '' && 'win-signing' || 'windows-latest' }}
             shell: cmd
             forge_platform: win32
         # Exclude ARM64 Linux from default matrix to use native runner
@@ -152,4 +152,4 @@ jobs:
           discussion_category_name: Releases
           make_latest: ${{ !contains(github.ref, 'rc') }}
           prerelease: ${{ contains(github.ref, 'rc') }}
-          token: ${{ secrets.RELEASE_PAT }}
+          token: ${{ secrets.RELEASE_PAT || github.token }}
