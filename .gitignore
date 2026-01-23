@@ -55,6 +55,9 @@ scripts/translation/.language*.json
 
 # AI Development Tools
 .claude/
+.codex/
 .opencode/
 planning/
 rules/
+AGENTS.md
+CLAUDE.md
