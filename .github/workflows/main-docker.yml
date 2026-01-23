@@ -106,6 +106,8 @@ jobs:
     runs-on: ${{ matrix.image }}
     needs:
       - test_docker
+    env:
+      DOCKERHUB_ENABLED: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
     permissions:
       contents: read
       packages: write
@@ -120,6 +122,18 @@ jobs:
         run: echo "IMAGE_NAME=${IMAGE_NAME,,}" >> $GITHUB_ENV
       - name: Set TEST_TAG to lowercase
         run: echo "TEST_TAG=${TEST_TAG,,}" >> $GITHUB_ENV
+      - name: Configure Docker registries
+        run: |
+          if [ "$DOCKERHUB_ENABLED" = "true" ]; then
+            {
+              echo "DOCKER_IMAGES<<EOF"
+              echo "${GHCR_REGISTRY}/${IMAGE_NAME}"
+              echo "${DOCKERHUB_REGISTRY}/${IMAGE_NAME}"
+              echo "EOF"
+            } >> "$GITHUB_ENV"
+          else
+            echo "DOCKER_IMAGES=${GHCR_REGISTRY}/${IMAGE_NAME}" >> "$GITHUB_ENV"
+          fi
 
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -147,9 +161,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: |
-            ${{ env.GHCR_REGISTRY }}/${{ env.IMAGE_NAME }}
-            ${{ env.DOCKERHUB_REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.DOCKER_IMAGES }}
           tags: |
             type=ref,event=branch
             type=ref,event=tag
@@ -171,6 +183,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Login to DockerHub
+        if: ${{ env.DOCKERHUB_ENABLED == 'true' }}
         uses: docker/login-action@v3
         with:
           registry: ${{ env.DOCKERHUB_REGISTRY }}
@@ -206,6 +219,8 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build
+    env:
+      DOCKERHUB_ENABLED: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
     steps:
       - name: Download digests
         uses: actions/download-artifact@v7
@@ -217,6 +232,18 @@ jobs:
         run: echo "IMAGE_NAME=${IMAGE_NAME,,}" >> $GITHUB_ENV
       - name: Set TEST_TAG to lowercase
         run: echo "TEST_TAG=${TEST_TAG,,}" >> $GITHUB_ENV
+      - name: Configure Docker registries
+        run: |
+          if [ "$DOCKERHUB_ENABLED" = "true" ]; then
+            {
+              echo "DOCKER_IMAGES<<EOF"
+              echo "${GHCR_REGISTRY}/${IMAGE_NAME}"
+              echo "${DOCKERHUB_REGISTRY}/${IMAGE_NAME}"
+              echo "EOF"
+            } >> "$GITHUB_ENV"
+          else
+            echo "DOCKER_IMAGES=${GHCR_REGISTRY}/${IMAGE_NAME}" >> "$GITHUB_ENV"
+          fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -225,9 +252,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: |
-            ${{ env.GHCR_REGISTRY }}/${{ env.IMAGE_NAME }}
-            ${{ env.DOCKERHUB_REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.DOCKER_IMAGES }}
           flavor: |
             latest=false
 
@@ -239,38 +264,32 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Login to DockerHub
+        if: ${{ env.DOCKERHUB_ENABLED == 'true' }}
         uses: docker/login-action@v3
         with:
           registry: ${{ env.DOCKERHUB_REGISTRY }}
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Create manifest list and push
+      - name: Create GHCR manifest list and push
         working-directory: /tmp/digests
         run: |
           # Extract the branch or tag name from the ref
           REF_NAME=$(echo "${GITHUB_REF}" | sed 's/refs\/heads\///' | sed 's/refs\/tags\///')
+          GHCR_TAGS=$(jq -cr --arg prefix "${GHCR_REGISTRY}/${IMAGE_NAME}:" '.tags | map(select(startswith($prefix)) | "-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON")
 
           # Create and push the manifest list with both the branch/tag name and the commit SHA
-          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+          docker buildx imagetools create $GHCR_TAGS \
             -t ${{ env.GHCR_REGISTRY }}/${{ env.IMAGE_NAME }}:${REF_NAME} \
             $(printf '${{ env.GHCR_REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
-
-          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            -t ${{ env.DOCKERHUB_REGISTRY }}/${{ env.IMAGE_NAME }}:${REF_NAME} \
-            $(printf '${{ env.DOCKERHUB_REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
 
           # If the ref is a tag, also tag the image as stable as this is part of a 'release'
           # and only go in the `if` if there is NOT a `-` in the tag's name, due to tagging of `-alpha`, `-beta`, etc...
           if [[ "${GITHUB_REF}" == refs/tags/* && ! "${REF_NAME}" =~ - ]]; then
             # First create stable tags
-            docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            docker buildx imagetools create $GHCR_TAGS \
               -t ${{ env.GHCR_REGISTRY }}/${{ env.IMAGE_NAME }}:stable \
               $(printf '${{ env.GHCR_REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
-
-            docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-              -t ${{ env.DOCKERHUB_REGISTRY }}/${{ env.IMAGE_NAME }}:stable \
-              $(printf '${{ env.DOCKERHUB_REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
 
             # Small delay to ensure stable tag is fully propagated
             sleep 5
@@ -279,14 +298,41 @@ jobs:
             docker buildx imagetools create \
               -t ${{ env.GHCR_REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
               ${{ env.GHCR_REGISTRY }}/${{ env.IMAGE_NAME }}:stable
+          fi
+      - name: Create DockerHub manifest list and push
+        if: ${{ env.DOCKERHUB_ENABLED == 'true' }}
+        working-directory: /tmp/digests
+        run: |
+          # Extract the branch or tag name from the ref
+          REF_NAME=$(echo "${GITHUB_REF}" | sed 's/refs\/heads\///' | sed 's/refs\/tags\///')
+          DOCKERHUB_TAGS=$(jq -cr --arg prefix "${DOCKERHUB_REGISTRY}/${IMAGE_NAME}:" '.tags | map(select(startswith($prefix)) | "-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON")
 
+          # Create and push the manifest list with both the branch/tag name and the commit SHA
+          docker buildx imagetools create $DOCKERHUB_TAGS \
+            -t ${{ env.DOCKERHUB_REGISTRY }}/${{ env.IMAGE_NAME }}:${REF_NAME} \
+            $(printf '${{ env.DOCKERHUB_REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
+
+          # If the ref is a tag, also tag the image as stable as this is part of a 'release'
+          # and only go in the `if` if there is NOT a `-` in the tag's name, due to tagging of `-alpha`, `-beta`, etc...
+          if [[ "${GITHUB_REF}" == refs/tags/* && ! "${REF_NAME}" =~ - ]]; then
+            # First create stable tags
+            docker buildx imagetools create $DOCKERHUB_TAGS \
+              -t ${{ env.DOCKERHUB_REGISTRY }}/${{ env.IMAGE_NAME }}:stable \
+              $(printf '${{ env.DOCKERHUB_REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
+
+            # Small delay to ensure stable tag is fully propagated
+            sleep 5
+
+            # Now update latest tags
             docker buildx imagetools create \
               -t ${{ env.DOCKERHUB_REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
               ${{ env.DOCKERHUB_REGISTRY }}/${{ env.IMAGE_NAME }}:stable
-
           fi
 
       - name: Inspect image
         run: |
           docker buildx imagetools inspect ${{ env.GHCR_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+      - name: Inspect DockerHub image
+        if: ${{ env.DOCKERHUB_ENABLED == 'true' }}
+        run: |
           docker buildx imagetools inspect ${{ env.DOCKERHUB_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
