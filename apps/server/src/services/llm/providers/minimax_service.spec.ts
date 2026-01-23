@@ -41,6 +41,7 @@ vi.mock('@anthropic-ai/sdk', () => {
 describe('MiniMaxService', () => {
     let service: MiniMaxService;
     let mockClient: { messages: { create: typeof mockCreate } };
+    const maybeIt = hasRealApiKey ? it : it.skip;
 
     beforeEach(async () => {
         vi.clearAllMocks();
@@ -79,10 +80,7 @@ describe('MiniMaxService', () => {
         vi.restoreAllMocks();
     });
 
-    it('sets default tool_choice when tools are provided', async () => {
-        if (!hasRealApiKey) {
-            return it.skip('Requires real MiniMax API key');
-        }
+    maybeIt('sets default tool_choice when tools are provided', async () => {
         const providerOptions: MiniMaxOptions = {
             apiKey: 'test-key',
             baseUrl: 'https://api.minimaxi.com/anthropic',
@@ -114,10 +112,7 @@ describe('MiniMaxService', () => {
         expect(calledParams.tool_choice).toEqual({ type: 'any' });
     });
 
-    it('clamps invalid temperature to default', async () => {
-        if (!hasRealApiKey) {
-            return it.skip('Requires real MiniMax API key');
-        }
+    maybeIt('clamps invalid temperature to default', async () => {
         const providerOptions: MiniMaxOptions = {
             apiKey: 'test-key',
             baseUrl: 'https://api.minimaxi.com/anthropic',

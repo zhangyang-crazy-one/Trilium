@@ -23,7 +23,10 @@ echo "Selected Arch: $ARCH"
 script_dir=$(realpath $(dirname $0))
 
 # Set Node.js version and architecture-specific filename
-NODE_VERSION=$(cat "../../.nvmrc")
+NODE_VERSION=$(tr -d 'v' < "../../.nvmrc")
+if [[ "$NODE_VERSION" =~ ^[0-9]+$ ]] && command -v node >/dev/null; then
+    NODE_VERSION=$(node --version | sed 's/^v//')
+fi
 BUILD_DIR="$script_dir/../dist"
 DIST_DIR="$script_dir/../out"
 
@@ -31,7 +34,15 @@ NODE_FILENAME=node-v${NODE_VERSION}-linux-${ARCH}
 
 echo "Downloading Node.js runtime $NODE_FILENAME..."
 cd $BUILD_DIR
-wget -qO- https://nodejs.org/dist/v${NODE_VERSION}/${NODE_FILENAME}.tar.xz | tar xfJ -
+NODE_TARBALL="${NODE_FILENAME}.tar.xz"
+NODE_URL="https://nodejs.org/dist/v${NODE_VERSION}/${NODE_TARBALL}"
+if command -v curl >/dev/null; then
+    curl -fsSLo "$NODE_TARBALL" "$NODE_URL"
+else
+    wget -qO "$NODE_TARBALL" "$NODE_URL"
+fi
+tar xfJ "$NODE_TARBALL"
+rm "$NODE_TARBALL"
 mv $NODE_FILENAME node
 cd ..
 
@@ -51,7 +62,7 @@ VERSION=`jq -r ".version" package.json`
 ARCHIVE_NAME="TriliumNotes-Server-${VERSION}-linux-${ARCH}"
 echo "Creating Archive $ARCHIVE_NAME..."
 
-mkdir $DIST_DIR
+mkdir -p $DIST_DIR
 cp -r "$BUILD_DIR" "$DIST_DIR/$ARCHIVE_NAME"
 cd $DIST_DIR
 tar cJf "$ARCHIVE_NAME.tar.xz" "$ARCHIVE_NAME"

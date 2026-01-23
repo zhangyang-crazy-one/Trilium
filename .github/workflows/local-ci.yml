@@ -79,12 +79,31 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Export Docker image
+        run: docker save trilium-local:test -o /tmp/trilium-local.tar
+
+      - name: Upload Docker image
+        uses: actions/upload-artifact@v6
+        with:
+          name: trilium-local-image
+          path: /tmp/trilium-local.tar
+          retention-days: 1
+
   docker-test:
     name: Test Docker Image
     runs-on: ubuntu-latest
     needs: build-docker
     timeout-minutes: 10
     steps:
+      - name: Download Docker image
+        uses: actions/download-artifact@v7
+        with:
+          name: trilium-local-image
+          path: /tmp
+
+      - name: Load Docker image
+        run: docker load -i /tmp/trilium-local.tar
+
       - name: Run container
         run: |
           CONTAINER_ID=$(docker run -d --rm --name trilium-test trilium-local:test)
