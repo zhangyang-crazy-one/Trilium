@@ -1,0 +1,158 @@
+name: Release Desktop (Linux/Windows)
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag or version (e.g., v0.101.4 or 0.101.4)"
+        required: true
+      prerelease:
+        description: "Mark as prerelease"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  discussions: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  INPUT_TAG: ${{ inputs.tag }}
+  RELEASE_TAG: ${{ startsWith(inputs.tag, 'v') && inputs.tag || format('v{0}', inputs.tag) }}
+
+jobs:
+  sanity-check:
+    name: Sanity Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - uses: pnpm/action-setup@v4
+      - name: Set up node & dependencies
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: "pnpm"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check version consistency
+        run: pnpm tsx ${{ github.workspace }}/scripts/check-version-consistency.ts ${{ env.RELEASE_TAG }}
+
+  make-electron:
+    name: Make Electron
+    needs:
+      - sanity-check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux
+            image: ubuntu-22.04
+            shell: bash
+            forge_platform: linux
+            arch: x64
+          - os: windows
+            image: windows-latest
+            shell: cmd
+            forge_platform: win32
+            arch: x64
+    runs-on: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: pnpm/action-setup@v4
+      - name: Set up node & dependencies
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: "pnpm"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run the build
+        uses: ./.github/actions/build-electron
+        with:
+          os: ${{ matrix.os }}
+          arch: ${{ matrix.arch }}
+          shell: ${{ matrix.shell }}
+          forge_platform: ${{ matrix.forge_platform }}
+        env:
+          WINDOWS_SIGN_EXECUTABLE: ${{ vars.WINDOWS_SIGN_EXECUTABLE }}
+          GPG_SIGNING_KEY: ${{ secrets.GPG_SIGN_KEY }}
+      - name: Upload Linux artifacts (deb, rpm)
+        if: matrix.os == 'linux'
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-desktop-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            apps/desktop/upload/*.deb
+            apps/desktop/upload/*.rpm
+
+      - name: Upload Windows artifacts
+        if: matrix.os == 'windows'
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-desktop-${{ matrix.os }}-${{ matrix.arch }}
+          path: apps/desktop/upload/*.*
+
+  publish_release:
+    name: Publish release
+    runs-on: ubuntu-latest
+    needs:
+      - make-electron
+    steps:
+      - run: mkdir upload
+
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          sparse-checkout: |
+            docs/Release Notes
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v7
+        with:
+          merge-multiple: true
+          pattern: release-desktop-*
+          path: upload
+
+      - name: Resolve release notes
+        id: notes
+        run: |
+          NOTES="docs/Release Notes/Release Notes/${RELEASE_TAG}.md"
+          if [ -f "$NOTES" ]; then
+            echo "notes_path=$NOTES" >> "$GITHUB_OUTPUT"
+          else
+            echo "notes_path=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish release with notes
+        if: steps.notes.outputs.notes_path != ''
+        uses: softprops/action-gh-release@v2.5.0
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          body_path: ${{ steps.notes.outputs.notes_path }}
+          fail_on_unmatched_files: true
+          files: upload/*.*
+          discussion_category_name: Releases
+          make_latest: ${{ !inputs.prerelease }}
+          prerelease: ${{ inputs.prerelease }}
+          token: ${{ secrets.RELEASE_PAT || github.token }}
+
+      - name: Publish release without notes
+        if: steps.notes.outputs.notes_path == ''
+        uses: softprops/action-gh-release@v2.5.0
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: upload/*.*
+          discussion_category_name: Releases
+          make_latest: ${{ !inputs.prerelease }}
+          prerelease: ${{ inputs.prerelease }}
+          token: ${{ secrets.RELEASE_PAT || github.token }}
