@@ -29,7 +29,7 @@ env:
 
 jobs:
   version-check:
-    name: Version Check (v${{ env.VERSION }})
+    name: Version Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -44,7 +44,7 @@ jobs:
           echo "Version verified: $CURRENT_VERSION"
 
   build-linux:
-    name: Build Linux (v${{ env.VERSION }})
+    name: Build Linux
     needs: version-check
     if: inputs.platform == 'all' || inputs.platform == 'linux'
     runs-on: ubuntu-latest
@@ -78,7 +78,7 @@ jobs:
           path: apps/desktop/upload/*.*
 
   build-windows:
-    name: Build Windows (v${{ env.VERSION }})
+    name: Build Windows
     needs: version-check
     if: inputs.platform == 'all' || inputs.platform == 'windows'
     runs-on: windows-latest
@@ -113,7 +113,7 @@ jobs:
           path: apps/desktop/upload/*.*
 
   create-github-release:
-    name: Create GitHub Release (v${{ env.VERSION }})
+    name: Create GitHub Release
     needs: [build-linux, build-windows]
     if: inputs.create_release == true
     runs-on: ubuntu-latest
@@ -153,7 +153,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   summary:
-    name: Build Summary (v${{ env.VERSION }})
+    name: Build Summary
     needs: [build-linux, build-windows]
     if: always()
     runs-on: ubuntu-latest
