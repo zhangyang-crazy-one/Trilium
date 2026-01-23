@@ -1,0 +1,176 @@
+name: Local Release (Linux/Windows)
+
+# 本地发布工作流 - 不需要任何远程参数
+# 只需要运行此工作流即可构建和打包
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Build platform'
+        type: choice
+        options:
+          - linux
+          - windows
+          - all
+        default: 'all'
+      create_release:
+        description: 'Create GitHub release'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  discussions: write
+
+env:
+  # 固定版本 - 不接受任何外部参数
+  VERSION: "0.0.1"
+
+jobs:
+  version-check:
+    name: Version Check (v${{ env.VERSION }})
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Verify version consistency
+        run: |
+          CURRENT_VERSION=$(node -e "console.log(require('./package.json').version)")
+          if [ "$CURRENT_VERSION" != "${{ env.VERSION }}" ]; then
+            echo "Version mismatch: expected ${{ env.VERSION }}, found $CURRENT_VERSION"
+            exit 1
+          fi
+          echo "Version verified: $CURRENT_VERSION"
+
+  build-linux:
+    name: Build Linux (v${{ env.VERSION }})
+    needs: version-check
+    if: inputs.platform == 'all' || inputs.platform == 'linux'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Desktop App
+        uses: ./.github/actions/build-electron
+        with:
+          os: linux
+          arch: x64
+          shell: bash
+          forge_platform: linux
+        env:
+          GPG_SIGNING_KEY: ${{ secrets.GPG_SIGN_KEY }}
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-linux-x64-v${{ env.VERSION }}
+          path: apps/desktop/upload/*.*
+
+  build-windows:
+    name: Build Windows (v${{ env.VERSION }})
+    needs: version-check
+    if: inputs.platform == 'all' || inputs.platform == 'windows'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Desktop App
+        uses: ./.github/actions/build-electron
+        with:
+          os: windows
+          arch: x64
+          shell: cmd
+          forge_platform: win32
+        env:
+          WINDOWS_SIGN_EXECUTABLE: ${{ vars.WINDOWS_SIGN_EXECUTABLE }}
+          GPG_SIGNING_KEY: ${{ secrets.GPG_SIGN_KEY }}
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-windows-x64-v${{ env.VERSION }}
+          path: apps/desktop/upload/*.*
+
+  create-github-release:
+    name: Create GitHub Release (v${{ env.VERSION }})
+    needs: [build-linux, build-windows]
+    if: inputs.create_release == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v7
+        with:
+          merge-multiple: true
+          path: upload
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2.5.0
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: Release v${{ env.VERSION }}
+          body: |
+            ## Local Build Release
+
+            This release was built using the local CI/CD workflow.
+
+            **Version:** ${{ env.VERSION }}
+
+            **License:** AGPL-3.0-only
+
+            ### Source Code
+            The source code is available at: https://github.com/zhangyang-crazy-one/Trilium
+
+            ### Notes
+            - Built from commit: ${{ github.sha }}
+            - Build date: ${{ github.event.repository.updated_at }}
+          fail_on_unmatched_files: true
+          files: upload/*.*
+          discussion_category_name: Releases
+          make_latest: true
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  summary:
+    name: Build Summary (v${{ env.VERSION }})
+    needs: [build-linux, build-windows]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print Build Summary
+        run: |
+          echo "## Local Release Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ env.VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- Linux: release-linux-x64-v${{ env.VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Windows: release-windows-x64-v${{ env.VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Download artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "2. Test the built applications" >> $GITHUB_STEP_SUMMARY
+          echo "3. Optionally trigger release with 'create_release: true'" >> $GITHUB_STEP_SUMMARY
