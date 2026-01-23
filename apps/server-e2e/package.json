@@ -1,6 +1,6 @@
 {
   "name": "@triliumnext/server-e2e",
-  "version": "0.0.1",
+  "version": "0.0.1.1",
   "private": true,
   "scripts": {
     "e2e": "playwright test"
