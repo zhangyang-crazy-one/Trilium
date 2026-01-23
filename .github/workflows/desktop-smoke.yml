@@ -1,0 +1,82 @@
+name: Desktop Smoke Tests
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/desktop/**"
+      - "apps/server/src/services/tray.ts"
+      - "apps/server/src/services/window.ts"
+  pull_request:
+    paths:
+      - "apps/desktop/**"
+      - "apps/server/src/services/tray.ts"
+      - "apps/server/src/services/window.ts"
+
+permissions:
+  contents: read
+
+jobs:
+  static-analysis:
+    name: Static Analysis (Asar Resource Check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Check asar resource patterns
+        run: pnpm tsx scripts/lint/check-asar-resources.ts
+
+  smoke-test:
+    name: Smoke Test (${{ matrix.os }})
+    needs: static-analysis
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            arch: x64
+          - os: windows-latest
+            arch: x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: "pnpm"
+      
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright
+        run: pnpm exec playwright install --with-deps
+
+      - name: Build Desktop (package only, no make)
+        run: pnpm run --filter desktop electron-forge:package --arch=${{ matrix.arch }}
+
+      - name: Install virtual display (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+
+      - name: Run Smoke Tests (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum pnpm exec playwright test apps/desktop-e2e/smoke.spec.ts
+
+      - name: Run Smoke Tests (Windows)
+        if: runner.os == 'Windows'
+        run: pnpm exec playwright test apps/desktop-e2e/smoke.spec.ts
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: smoke-test-results-${{ matrix.os }}
+          path: test-results/
