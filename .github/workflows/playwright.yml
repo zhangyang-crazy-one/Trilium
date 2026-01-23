@@ -27,6 +27,7 @@ jobs:
             arch: arm64
     runs-on: ${{ matrix.os }}
     name: E2E tests on ${{ matrix.name }}
+    timeout-minutes: 45
     env:
       TRILIUM_DOCKER: 1
       TRILIUM_PORT: 8082
@@ -41,7 +42,7 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: 'pnpm'
 
       - name: Install dependencies
