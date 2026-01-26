@@ -41,7 +41,7 @@
     "dev:linter-fix": "cross-env NODE_OPTIONS=--max_old_space_size=4096 eslint . --fix",
     "lint:asar-resources": "tsx scripts/lint/check-asar-resources.ts",
     "postinstall": "tsx scripts/electron-rebuild.mts && pnpm prepare",
-    "prepare": "pnpm run --filter pdfjs-viewer --filter share-theme build"
+    "prepare": "pnpm run --filter pdfjs-viewer --filter share-theme build && pnpm run --filter web-clipper postinstall"
   },
   "private": true,
   "devDependencies": {
@@ -52,9 +52,9 @@
     "@types/express": "5.0.6",
     "@types/js-yaml": "4.0.9",
     "@types/node": "24.10.9",
-    "@vitest/browser-webdriverio": "4.0.17",
-    "@vitest/coverage-v8": "4.0.17",
-    "@vitest/ui": "4.0.17",
+    "@vitest/browser-webdriverio": "4.0.18",
+    "@vitest/coverage-v8": "4.0.18",
+    "@vitest/ui": "4.0.18",
     "chalk": "5.6.2",
     "cross-env": "10.1.0",
     "dpdm": "3.14.0",
@@ -64,7 +64,7 @@
     "eslint-config-prettier": "10.1.8",
     "eslint-plugin-playwright": "2.5.0",
     "eslint-plugin-simple-import-sort": "12.1.1",
-    "happy-dom": "20.3.4",
+    "happy-dom": "20.3.9",
     "http-server": "14.1.1",
     "jiti": "2.6.1",
     "js-yaml": "4.1.1",
@@ -78,7 +78,7 @@
     "upath": "2.0.1",
     "vite": "7.3.1",
     "vite-plugin-dts": "4.5.4",
-    "vitest": "4.0.17"
+    "vitest": "4.0.18"
   },
   "license": "AGPL-3.0-only",
   "author": {
